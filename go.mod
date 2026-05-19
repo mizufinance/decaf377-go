@@ -4,7 +4,7 @@ go 1.25.4
 
 require (
 	github.com/consensys/gnark v0.14.0
-	github.com/consensys/gnark-crypto v0.19.0
+	github.com/consensys/gnark-crypto v0.19.2
 )
 
 require (
