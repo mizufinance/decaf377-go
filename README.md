@@ -4,7 +4,7 @@ Go decaf377 primitives and verifier compatibility tests.
 
 This local module is staged as the future `github.com/mizufinance/decaf377-go`
 repository. The first concrete compatibility target is the current Orbis
-SHA-256 FROST wire format. Penumbra `decaf377-rdsa` remains a separate API
+SHA-512 FROST wire format. Penumbra `decaf377-rdsa` remains a separate API
 surface.
 
 ## Packages
@@ -13,12 +13,16 @@ surface.
   handling, point addition, and scalar multiplication.
 - `gnark`: reusable decaf377 gnark gadgets and native helpers for circuit
   tests.
-- `orbisfrost`: verifier for the current Orbis SHA-256 FROST `(R, z)` wire
+- `orbisfrost`: verifier for the current Orbis SHA-512 FROST `(R, z)` wire
   format.
 - `rdsa`: verifier for Penumbra-compatible `decaf377-rdsa` SpendAuth
   signatures.
 
 ## Verification
+
+Orbis FROST challenges are hashed with SHA-512 before reduction into the
+Decaf377 scalar field. Callers using `ScalarFromUniformBytes` for hash-to-scalar
+FROST material should provide 64 bytes of input so reduction bias is negligible.
 
 Run:
 
