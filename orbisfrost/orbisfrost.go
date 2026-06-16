@@ -1,7 +1,7 @@
 package orbisfrost
 
 import (
-	"crypto/sha256"
+	"crypto/sha512"
 
 	"github.com/mizufinance/decaf377-go"
 )
@@ -32,7 +32,7 @@ func Verify(publicKeyBytes, msg, signatureBytes []byte) (bool, error) {
 		return false, err
 	}
 
-	h := sha256.New()
+	h := sha512.New()
 	h.Write([]byte(ChallengeDomain))
 	h.Write(rBytes)
 	h.Write(publicKeyBytes)
