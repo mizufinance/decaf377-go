@@ -75,9 +75,10 @@ func TestCompressToFieldMatchesNative(t *testing.T) {
 		t.Fatalf("compress generator: %v", err)
 	}
 
+	x, y := generator.AffineBytes()
 	assignment := &compressToFieldCircuit{
-		X:        generator.X,
-		Y:        generator.Y,
+		X:        LittleEndianBytesToBigInt(x[:]),
+		Y:        LittleEndianBytesToBigInt(y[:]),
 		Expected: expected,
 	}
 	if err := test.IsSolved(&compressToFieldCircuit{}, assignment, ecc.BLS12_377.ScalarField()); err != nil {

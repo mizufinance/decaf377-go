@@ -62,26 +62,6 @@ func PointAddNative(left, right gnarkte.Point) (gnarkte.Point, error) {
 	return gnarkte.Point{X: x, Y: y}, nil
 }
 
-func ScalarMulNative(base gnarkte.Point, scalar *big.Int, nBits int) (gnarkte.Point, error) {
-	result := gnarkte.Point{X: big.NewInt(0), Y: big.NewInt(1)}
-	current := base
-	for i := 0; i < nBits; i++ {
-		if scalar.Bit(i) == 1 {
-			var err error
-			result, err = PointAddNative(result, current)
-			if err != nil {
-				return gnarkte.Point{}, err
-			}
-		}
-		var err error
-		current, err = PointAddNative(current, current)
-		if err != nil {
-			return gnarkte.Point{}, err
-		}
-	}
-	return result, nil
-}
-
 func IsLessThanConstant(api frontend.API, value frontend.Variable, constant *big.Int) (frontend.Variable, error) {
 	valueBits := api.ToBinary(value, FieldBits)
 	constantBits := make([]uint, FieldBits)
