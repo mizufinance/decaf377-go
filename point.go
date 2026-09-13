@@ -31,10 +31,10 @@ func PointFromAffineBytes(x, y [32]byte) (Point, error) {
 	for i := range x {
 		p.x[i], p.y[i] = x[31-i], y[31-i]
 	}
-	if _, err := bigmodFieldCheck(p.x); err != nil {
+	if !fieldCanonical(p.x) {
 		return Point{}, ErrInvalidPoint
 	}
-	if _, err := bigmodFieldCheck(p.y); err != nil {
+	if !fieldCanonical(p.y) {
 		return Point{}, ErrInvalidPoint
 	}
 	if !p.Valid() {

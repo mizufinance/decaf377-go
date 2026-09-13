@@ -3,7 +3,6 @@ module github.com/mizufinance/decaf377-go
 go 1.25.4
 
 require (
-	filippo.io/bigmod v0.1.1-0.20260103110540-f8a47775ebe5
 	github.com/consensys/gnark v0.14.0
 	github.com/consensys/gnark-crypto v0.19.2
 )

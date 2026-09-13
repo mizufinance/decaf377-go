@@ -2,51 +2,57 @@ package decaf377
 
 import (
 	"crypto/subtle"
-	"filippo.io/bigmod"
+	"encoding/binary"
 	"math/big"
+	"math/bits"
+
+	"github.com/mizufinance/decaf377-go/internal/fiat"
 )
 
 // fieldElement holds a canonical, fixed-width big-endian residue.
 type fieldElement [32]byte
 
-var nativeModulus = func() *bigmod.Modulus {
-	m, err := bigmod.NewModulus(fieldModulus.Bytes())
-	if err != nil {
-		panic(err)
+func fieldWords(x fieldElement) (out [4]uint64) {
+	for i := range out {
+		out[i] = binary.BigEndian.Uint64(x[24-8*i : 32-8*i])
 	}
-	return m
-}()
-
-func fieldNat(x fieldElement) *bigmod.Nat {
-	n, err := bigmod.NewNat().SetBytes(x[:], nativeModulus)
-	// Internal elements are canonical. This is an invariant check, not reduction.
-	if err != nil {
-		panic(err)
-	}
-	return n
+	return
 }
 
-func fieldFromNat(n *bigmod.Nat) (out fieldElement) {
-	copy(out[:], n.Bytes(nativeModulus))
+func fieldFromWords(x [4]uint64) (out fieldElement) {
+	for i := range x {
+		binary.BigEndian.PutUint64(out[24-8*i:32-8*i], x[i])
+	}
 	return
 }
 
 func fieldUint(x uint) fieldElement {
-	return fieldFromNat(bigmod.NewNat().SetUint(x).ExpandFor(nativeModulus))
+	return fieldFromWords([4]uint64{uint64(x)})
 }
 func (x fieldElement) add(y fieldElement) fieldElement {
-	return fieldFromNat(fieldNat(x).Add(fieldNat(y), nativeModulus))
+	a, b := fieldWords(x), fieldWords(y)
+	var out [4]uint64
+	fiat.FqAdd(&out, &a, &b)
+	return fieldFromWords(out)
 }
 func (x fieldElement) sub(y fieldElement) fieldElement {
-	return fieldFromNat(fieldNat(x).Sub(fieldNat(y), nativeModulus))
+	a, b := fieldWords(x), fieldWords(y)
+	var out [4]uint64
+	fiat.FqSub(&out, &a, &b)
+	return fieldFromWords(out)
 }
 func (x fieldElement) mul(y fieldElement) fieldElement {
-	return fieldFromNat(fieldNat(x).Mul(fieldNat(y), nativeModulus))
+	a, b := fieldWords(x), fieldWords(y)
+	var am, bm, out [4]uint64
+	fiat.FqToMontgomery(&am, &a)
+	fiat.FqToMontgomery(&bm, &b)
+	fiat.FqMul(&out, &am, &bm)
+	fiat.FqFromMontgomery(&a, &out)
+	return fieldFromWords(a)
 }
 func (x fieldElement) inverse() fieldElement {
-	// Public exponent q - 2; Exp also has a fixed schedule for this byte length.
 	exponent := inverseExponent
-	return fieldFromNat(bigmod.NewNat().Exp(fieldNat(x), exponent[:], nativeModulus))
+	return x.pow(exponent[:])
 }
 func fieldSelect(x, y fieldElement, choice byte) (out fieldElement) {
 	for i := range out {
@@ -57,12 +63,31 @@ func fieldSelect(x, y fieldElement, choice byte) (out fieldElement) {
 
 var inverseExponent = func() (out [32]byte) { new(big.Int).Sub(fieldModulus, big.NewInt(2)).FillBytes(out[:]); return }()
 
-func bigmodFieldCheck(x fieldElement) (*bigmod.Nat, error) {
-	return bigmod.NewNat().SetBytes(x[:], nativeModulus)
+func fieldCanonical(x fieldElement) bool {
+	a := fieldWords(x)
+	var modulus [5]uint64
+	fiat.FqMsat(&modulus)
+	var borrow uint64
+	for i := range a {
+		_, borrow = bits.Sub64(a[i], modulus[i], borrow)
+	}
+	return borrow == 1
 }
 
 func (x fieldElement) pow(exponent []byte) fieldElement {
-	return fieldFromNat(bigmod.NewNat().Exp(fieldNat(x), exponent, nativeModulus))
+	a := fieldWords(x)
+	var base, out, product [4]uint64
+	fiat.FqToMontgomery(&base, &a)
+	fiat.FqSetOne(&out)
+	for _, digit := range exponent {
+		for bit := 7; bit >= 0; bit-- {
+			fiat.FqSquare(&out, &out)
+			fiat.FqMul(&product, &out, &base)
+			fiat.FqSelectznz(&out, fiat.FqUint1((digit>>bit)&1), &out, &product)
+		}
+	}
+	fiat.FqFromMontgomery(&a, &out)
+	return fieldFromWords(a)
 }
 func (x fieldElement) abs() fieldElement {
 	return fieldSelect(x, fieldElement{}.sub(x), x[31]&1)
