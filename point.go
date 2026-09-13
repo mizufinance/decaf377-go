@@ -7,13 +7,19 @@ import (
 
 // Point stores canonical affine coordinates at a fixed width.
 // The zero value is invalid; use Identity for the group identity.
-type Point struct{ x, y fieldElement }
+type Point struct {
+	x, y fieldElement
+	// Equals Edwards curve membership for every publicly constructible Point.
+	// This does not assert prime-order subgroup membership.
+	valid bool
+}
 
 // NewPoint imports public coordinates. big.Int conversion is variable-time.
 func NewPoint(x, y *big.Int) Point {
 	var p Point
 	mod(x).FillBytes(p.x[:])
 	mod(y).FillBytes(p.y[:])
+	p.valid = p.onCurve()
 	return p
 }
 
@@ -37,16 +43,21 @@ func PointFromAffineBytes(x, y [32]byte) (Point, error) {
 	if !fieldCanonical(p.y) {
 		return Point{}, ErrInvalidPoint
 	}
-	if !p.Valid() {
+	if !p.onCurve() {
 		return Point{}, ErrInvalidPoint
 	}
+	p.valid = true
 	return p, nil
 }
 
-func Identity() Point           { return Point{y: fieldUint(1)} }
+func Identity() Point           { return Point{y: fieldUint(1), valid: true} }
 func Generator() (Point, error) { var enc [32]byte; enc[0] = 8; return Decode(enc[:]) }
 
-func (p Point) Valid() bool {
+func (p Point) Valid() bool { return p.valid }
+
+// onCurve establishes membership when importing coordinates. Group operations
+// preserve that invariant; they do not revalidate secret-derived coordinates.
+func (p Point) onCurve() bool {
 	x2, y2 := p.x.mul(p.x), p.y.mul(p.y)
 	left := y2.sub(x2)
 	right := fieldUint(1).add(fieldUint(3021).mul(x2).mul(y2))
@@ -59,7 +70,9 @@ type extendedPoint struct{ x, y, z, t fieldElement }
 func (p Point) extended() extendedPoint { return extendedPoint{p.x, p.y, fieldUint(1), p.x.mul(p.y)} }
 func (p extendedPoint) affine() Point {
 	inverse := p.z.inverse()
-	return Point{p.x.mul(inverse), p.y.mul(inverse)}
+	// Called only on complete-formula results from validated input points.
+	// The group refinement must establish the coordinate invariant and z != 0.
+	return Point{x: p.x.mul(inverse), y: p.y.mul(inverse), valid: true}
 }
 func (p extendedPoint) add(q extendedPoint) extendedPoint {
 	a, b := p.x.mul(q.x), p.y.mul(q.y)
@@ -77,7 +90,7 @@ func Add(left, right Point) (Point, error) {
 	}
 	return left.extended().add(right.extended()).affine(), nil
 }
-func Neg(p Point) Point                    { return Point{fieldElement{}.sub(p.x), p.y} }
+func Neg(p Point) Point                    { return Point{x: fieldElement{}.sub(p.x), y: p.y, valid: p.valid} }
 func Sub(left, right Point) (Point, error) { return Add(left, Neg(right)) }
 
 // ScalarMul multiplies by the full 256-bit little-endian integer without reducing
