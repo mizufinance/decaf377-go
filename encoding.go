@@ -41,30 +41,40 @@ func Decode(bytes []byte) (Point, error) {
 	return point, nil
 }
 
+// CompressToField converts the encoded result to big.Int. This final conversion is
+// variable-time; use CompressToFieldBytes when the result must remain secret.
 func CompressToField(point Point) (*big.Int, error) {
-	if !point.Valid() {
-		return nil, ErrInvalidPoint
-	}
-	x, y := mod(point.X), mod(point.Y)
-	t := mul(x, y)
-
-	u1 := mul(add(x, t), sub(x, t))
-	_, v, err := sqrtRatioZetaDen(mul(u1, aMinusD, square(x)))
+	bytes, err := CompressToFieldBytes(point)
 	if err != nil {
 		return nil, err
 	}
+	return littleEndianToBigInt(bytes[:]), nil
+}
 
-	u2 := abs(mul(v, u1))
-	u3 := sub(u2, t)
-	return abs(mul(aMinusD, v, u3, x)), nil
+// CompressToFieldBytes keeps intermediate arithmetic and the result at fixed width.
+func CompressToFieldBytes(point Point) ([32]byte, error) {
+	if !point.Valid() {
+		return [32]byte{}, ErrInvalidPoint
+	}
+	x, y := point.x, point.y
+	t := x.mul(y)
+	u1 := x.add(t).mul(x.sub(t))
+	aMinusD := fieldElement{}.sub(fieldUint(3022))
+	v := u1.mul(aMinusD).mul(x.mul(x)).inverse().sqrtRatioZeta()
+	u2 := v.mul(u1).abs()
+	u3 := u2.sub(t)
+	s := aMinusD.mul(v).mul(u3).mul(x).abs()
+	var out [32]byte
+	for i := range out {
+		out[i] = s[31-i]
+	}
+	return out, nil
 }
 
 func Encode(point Point) ([]byte, error) {
-	s, err := CompressToField(point)
+	s, err := CompressToFieldBytes(point)
 	if err != nil {
 		return nil, err
 	}
-	out := bigIntToLittleEndian32(s)
-	out[31] &= 0b00011111
-	return out[:], nil
+	return s[:], nil
 }
